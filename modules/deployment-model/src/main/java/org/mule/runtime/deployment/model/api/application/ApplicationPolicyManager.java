@@ -28,6 +28,10 @@ public interface ApplicationPolicyManager {
   void addPolicy(PolicyTemplateDescriptor policyTemplateDescriptor, PolicyParametrization parametrization)
       throws PolicyRegistrationException;
 
+  void updatePolicy(PolicyTemplateDescriptor policyTemplateDescriptor, PolicyParametrization parametrization)
+      throws PolicyRegistrationException;
+
+
   /**
    * Removes a policy from the application
    *

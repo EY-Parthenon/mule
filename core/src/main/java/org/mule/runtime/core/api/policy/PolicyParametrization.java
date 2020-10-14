@@ -31,7 +31,7 @@ public final class PolicyParametrization {
   private final String id;
   private final PolicyPointcut pointcut;
   private final Map<String, String> parameters;
-  private final int order;
+  private int order;
   private final File config;
   private final List<NotificationListener> notificationListeners;
 
@@ -135,5 +135,10 @@ public final class PolicyParametrization {
    */
   public List<NotificationListener> getNotificationListeners() {
     return notificationListeners;
+  }
+
+  //TODO before sending this as a PR, please retire from coding and do smth else.
+  public void updateOrder(int order) {
+    this.order = order;
   }
 }

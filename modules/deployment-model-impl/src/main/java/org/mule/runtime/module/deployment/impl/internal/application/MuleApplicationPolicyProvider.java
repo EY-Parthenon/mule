@@ -14,6 +14,7 @@ import static org.mule.runtime.api.util.Preconditions.checkArgument;
 import static org.mule.runtime.http.policy.api.SourcePolicyAwareAttributes.noAttributes;
 
 import org.mule.runtime.api.lifecycle.Disposable;
+import org.mule.runtime.api.lifecycle.InitialisationException;
 import org.mule.runtime.core.api.policy.Policy;
 import org.mule.runtime.core.api.policy.PolicyParametrization;
 import org.mule.runtime.core.api.policy.PolicyProvider;
@@ -32,6 +33,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /**
  * Provides policy management and provision for Mule applications
@@ -41,7 +43,7 @@ public class MuleApplicationPolicyProvider implements ApplicationPolicyProvider,
   private final PolicyTemplateFactory policyTemplateFactory;
   private final PolicyInstanceProviderFactory policyInstanceProviderFactory;
   private final List<RegisteredPolicyTemplate> registeredPolicyTemplates = new LinkedList<>();
-  private final List<RegisteredPolicyInstanceProvider> registeredPolicyInstanceProviders = new LinkedList<>();
+  private List<RegisteredPolicyInstanceProvider> registeredPolicyInstanceProviders = new LinkedList<>(); //TODO this has stopped being final., WAT
   private PolicyAwareAttributes sourcePolicyAwareAttributes = noAttributes();
   private Application application;
 
@@ -66,35 +68,20 @@ public class MuleApplicationPolicyProvider implements ApplicationPolicyProvider,
     try {
       checkArgument(application != null, "application was not configured on the policy provider");
 
-      Optional<RegisteredPolicyInstanceProvider> registeredPolicyInstanceProvider = registeredPolicyInstanceProviders.stream()
-          .filter(p -> p.getPolicyId().equals(parametrization.getId())).findFirst();
-      if (registeredPolicyInstanceProvider.isPresent()) {
+      if (registeredPolicyInstanceProviders.stream().anyMatch(isPolicy(parametrization))) {
         throw new IllegalArgumentException(createPolicyAlreadyRegisteredError(parametrization.getId()));
       }
 
-      Optional<RegisteredPolicyTemplate> registeredPolicyTemplate = registeredPolicyTemplates.stream()
-          .filter(p -> p.policyTemplate.getDescriptor().getBundleDescriptor().getGroupId()
-              .equals(policyTemplateDescriptor.getBundleDescriptor().getGroupId()) &&
-              p.policyTemplate.getDescriptor().getBundleDescriptor().getArtifactId()
-                  .equals(policyTemplateDescriptor.getBundleDescriptor().getArtifactId())
-              &&
-              p.policyTemplate.getDescriptor().getBundleDescriptor().getVersion()
-                  .equals(policyTemplateDescriptor.getBundleDescriptor().getVersion()))
-          .findAny();
+      Optional<RegisteredPolicyTemplate> registeredPolicyTemplate = xxxNoSeQueHacexxx(policyTemplateDescriptor);
 
-      if (!registeredPolicyTemplate.isPresent()) {
-        PolicyTemplate policyTemplate = policyTemplateFactory.createArtifact(application, policyTemplateDescriptor);
-        registeredPolicyTemplate = of(new RegisteredPolicyTemplate(policyTemplate));
-        registeredPolicyTemplates.add(registeredPolicyTemplate.get());
-      }
+      ApplicationPolicyInstance applicationPolicyInstance =
+          createAndInitPolicyInstance(parametrization, registeredPolicyTemplate);
 
-      ApplicationPolicyInstance applicationPolicyInstance = policyInstanceProviderFactory
-          .create(application, registeredPolicyTemplate.get().policyTemplate, parametrization);
-
-      applicationPolicyInstance.initialise();
+      RegisteredPolicyInstanceProvider registeredPolicyInstanceProvider =
+          new RegisteredPolicyInstanceProvider(applicationPolicyInstance, parametrization.getId());
 
       registeredPolicyInstanceProviders
-          .add(new RegisteredPolicyInstanceProvider(applicationPolicyInstance, parametrization.getId()));
+          .add(registeredPolicyInstanceProvider);
       registeredPolicyInstanceProviders.sort(null);
       registeredPolicyTemplate.get().count++;
 
@@ -103,6 +90,86 @@ public class MuleApplicationPolicyProvider implements ApplicationPolicyProvider,
     } catch (Exception e) {
       throw new PolicyRegistrationException(createPolicyRegistrationError(parametrization.getId()), e);
     }
+  }
+
+  private Predicate<RegisteredPolicyInstanceProvider> isPolicy(PolicyParametrization parametrization) {
+    return p -> p.getPolicyId().equals(parametrization.getId());
+  }
+
+  private Optional<RegisteredPolicyTemplate> xxxNoSeQueHacexxx(PolicyTemplateDescriptor policyTemplateDescriptor) {
+    Optional<RegisteredPolicyTemplate> registeredPolicyTemplate = findRegistered(policyTemplateDescriptor);
+
+    if (!registeredPolicyTemplate.isPresent()) {
+      PolicyTemplate policyTemplate = policyTemplateFactory.createArtifact(application, policyTemplateDescriptor);
+      registeredPolicyTemplate = of(new RegisteredPolicyTemplate(policyTemplate));
+      registeredPolicyTemplates.add(registeredPolicyTemplate.get());
+    }
+    return registeredPolicyTemplate;
+  }
+
+  private ApplicationPolicyInstance createAndInitPolicyInstance(PolicyParametrization parametrization,
+                                                                Optional<RegisteredPolicyTemplate> registeredPolicyTemplate)
+      throws InitialisationException {
+    ApplicationPolicyInstance applicationPolicyInstance = policyInstanceProviderFactory
+        .create(application, registeredPolicyTemplate.get().policyTemplate, parametrization);
+
+    applicationPolicyInstance.initialise();
+
+    return applicationPolicyInstance;
+  }
+
+  @Override
+  public void updatePolicy(PolicyTemplateDescriptor policyTemplateDescriptor, PolicyParametrization parametrization)
+      throws PolicyRegistrationException {
+    registeredPolicyInstanceProviders.stream()
+        .filter(ip -> ip.policyId.equalsIgnoreCase(parametrization.getId()))
+        .findFirst()
+        .ifPresent(ip -> ip.applicationPolicyInstance.updateOrder(parametrization.getOrder()));
+
+    registeredPolicyInstanceProviders.sort(null); //todo from L118 to here it's only to fix the ordering stuff.
+
+    //    todo this should be a precondition check.
+    //    if (registeredPolicyInstanceProviders.stream().anyMatch(isPolicy(parametrization))) {
+    //      throw new IllegalArgumentException(createPolicyAlreadyRegisteredError(parametrization.getId()));
+    //    }
+
+    Optional<RegisteredPolicyTemplate> registeredPolicyTemplate = xxxNoSeQueHacexxx(policyTemplateDescriptor);
+
+    try {
+      ApplicationPolicyInstance applicationPolicyInstance = null;
+      applicationPolicyInstance = createAndInitPolicyInstance(parametrization, registeredPolicyTemplate);
+      RegisteredPolicyInstanceProvider newPolicy =
+          new RegisteredPolicyInstanceProvider(applicationPolicyInstance, parametrization.getId());
+
+      RegisteredPolicyInstanceProvider outdatedPolicy =
+          registeredPolicyInstanceProviders.stream().filter(isPolicy(parametrization)).findFirst().get();
+      List<RegisteredPolicyInstanceProvider> newRegisteredPolicyInstanceProviders =
+          new ArrayList<>(registeredPolicyInstanceProviders);
+      newRegisteredPolicyInstanceProviders.remove(outdatedPolicy);
+      newRegisteredPolicyInstanceProviders.add(newPolicy);
+      newRegisteredPolicyInstanceProviders.sort(null);
+      registeredPolicyInstanceProviders = newRegisteredPolicyInstanceProviders;
+
+      policiesChangedCallback.run();
+
+      outdatedPolicy.getApplicationPolicyInstance().dispose(); //todo dispose outside the chain. perhaps async?
+
+    } catch (InitialisationException e) {
+      throw new RuntimeException("idk, smth failed", e);
+    }
+
+  }
+
+  private Optional<RegisteredPolicyTemplate> findRegistered(PolicyTemplateDescriptor policyTemplateDescriptor) {
+    return registeredPolicyTemplates.stream()
+        .filter(p -> p.policyTemplate.getDescriptor().getBundleDescriptor().getGroupId()
+            .equals(policyTemplateDescriptor.getBundleDescriptor().getGroupId()) &&
+            p.policyTemplate.getDescriptor().getBundleDescriptor().getArtifactId()
+                .equals(policyTemplateDescriptor.getBundleDescriptor().getArtifactId())
+            &&
+            p.policyTemplate.getDescriptor().getBundleDescriptor().getVersion()
+                .equals(policyTemplateDescriptor.getBundleDescriptor().getVersion()))
+        .findAny();
   }
 
   @Override
@@ -173,7 +240,7 @@ public class MuleApplicationPolicyProvider implements ApplicationPolicyProvider,
         .reduce(noAttributes(), PolicyAwareAttributes::merge);
   }
 
-  @Override
+  @Override //TODO shouldn't this have a RW lock with the other editing this list?
   public List<Policy> findSourceParameterizedPolicies(PolicyPointcutParameters policyPointcutParameters) {
     List<Policy> policies = new ArrayList<>();
 

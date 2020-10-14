@@ -200,4 +200,9 @@ public class DefaultApplicationPolicyInstance implements ApplicationPolicyInstan
         .map(chain -> new Policy(chain, parametrization.getId()));
   }
 
+  @Override
+  public void updateOrder(int order) {
+    parametrization.updateOrder(order);
+  }
+
 }
