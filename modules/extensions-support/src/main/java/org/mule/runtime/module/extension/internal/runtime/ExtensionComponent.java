@@ -449,6 +449,33 @@ public abstract class ExtensionComponent<T extends ComponentModel> extends Abstr
     }
   }
 
+  @Override
+  public Set<Value> getValues(String parameterName, String fieldPath) throws ValueResolvingException {
+    try {
+      return runWithResolvingContext(context -> withContextClassLoader(classLoader,
+                                                                       () -> getValueProviderMediator()
+                                                                           .getValues(parameterName,
+                                                                                      getParameterValueResolver(), fieldPath,
+                                                                                      (CheckedSupplier<Object>) () -> context
+                                                                                          .getConnection().orElse(null),
+                                                                                      (CheckedSupplier<Object>) () -> context
+                                                                                          .getConfig().orElse(null),
+                                                                                      context.getConnectionProvider()
+                                                                                          .orElse(null))));
+    } catch (MuleRuntimeException e) {
+      Throwable rootException = getRootException(e);
+      if (rootException instanceof ValueResolvingException) {
+        throw (ValueResolvingException) rootException;
+      } else {
+        throw new ValueResolvingException("An unknown error occurred trying to resolve values. " + e.getCause().getMessage(),
+                                          UNKNOWN, e);
+      }
+    } catch (Exception e) {
+      throw new ValueResolvingException("An unknown error occurred trying to resolve values. " + e.getCause().getMessage(),
+                                        UNKNOWN, e);
+    }
+  }
+
   /**
    * {@inheritDoc}
    */

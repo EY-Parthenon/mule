@@ -81,6 +81,11 @@ public abstract class AbstractValuesTestCase extends MuleArtifactFunctionalTestC
     return valueProviderService.getValues(location, parameterName);
   }
 
+  ValueResult getValueResult(String flowName, String parameterName, String fieldPath) throws Exception {
+    Location location = Location.builder().globalName(flowName).addProcessorsPart().addIndexPart(0).build();
+    return valueProviderService.getFieldValues(location, parameterName, fieldPath);
+  }
+
   Set<Value> getValuesFromConfig(String configName, String parameterName) throws Exception {
     return checkResultAndRetrieveValues(getValueResultFromConfig(configName, parameterName));
   }

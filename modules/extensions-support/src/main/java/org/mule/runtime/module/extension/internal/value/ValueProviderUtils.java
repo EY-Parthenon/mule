@@ -52,7 +52,11 @@ public class ValueProviderUtils {
   }
 
   public static ValueBuilder cloneAndEnrichValue(Value value, List<ParameterModel> parameters) {
-    return cloneAndEnrichValue(value, orderParts(parameters), 1);
+    return cloneAndEnrichValue(value, orderParts(parameters, null), 1);
+  }
+
+  public static ValueBuilder cloneAndEnrichValue(Value value, List<ParameterModel> parameters, String providerId) {
+    return cloneAndEnrichValue(value, orderParts(parameters, providerId), 1);
   }
 
   /**
@@ -71,7 +75,14 @@ public class ValueProviderUtils {
     return keyBuilder;
   }
 
-  private static Map<Integer, String> orderParts(List<ParameterModel> parameters) {
+  private static Map<Integer, String> orderParts(List<ParameterModel> parameters, String providerId) {
+    if (parameters.size() == 1 && parameters.get(0).getValueProviderModels().isPresent()
+        && parameters.get(0).getValueProviderModels().get().isRight()) {
+      return parameters.get(0).getValueProviderModels().get().getRight().stream()
+          .filter(fieldValueProviderModel -> fieldValueProviderModel.getProviderId().equals(providerId))
+          .collect(toMap(fieldModel -> fieldModel.getPartOrder(),
+                         fieldModel -> parameters.get(0).getName() + "." + fieldModel.getFieldPath()));
+    }
     return parameters.stream()
         .collect(toMap(param -> param.getValueProviderModel().get().getPartOrder(), NamedObject::getName));
   }

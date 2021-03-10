@@ -52,6 +52,11 @@ public class MuleValueProviderService implements ValueProviderService {
     return getValueResult(() -> this.findValueProvider(location, providerName).resolve());
   }
 
+  @Override
+  public ValueResult getFieldValues(Location location, String parameterName, String fieldPath) {
+    return getValueResult(() -> this.findValueProvider(location, parameterName, fieldPath).resolve());
+  }
+
   /**
    * Executes the {@link Value} resolving logic and wraps the result into a {@link ValueResult}. In case that the resolving
    * finished
@@ -106,6 +111,34 @@ public class MuleValueProviderService implements ValueProviderService {
                                              location),
                                       NOT_VALUE_PROVIDER_ENABLED);
   }
+
+  private ValueProvider findValueProvider(Location location, String parameterName, String fieldPath)
+      throws ValueResolvingException {
+    boolean isConnection = isConnection(location);
+
+    Location realLocation = isConnection
+        ? deleteLastPartFromLocation(location)
+        : location;
+
+    Object component = findComponent(realLocation);
+
+    if (component instanceof ComponentValueProvider) {
+      return () -> ((ComponentValueProvider) component).getValues(parameterName, fieldPath);
+    }
+
+    if (component instanceof ConfigurationParameterValueProvider) {
+      if (isConnection) {
+        return () -> ((ConfigurationParameterValueProvider) component).getConnectionValues(parameterName, fieldPath);
+      } else {
+        return () -> ((ConfigurationParameterValueProvider) component).getConfigValues(parameterName, fieldPath);
+      }
+    }
+
+    throw new ValueResolvingException(format("The found element in the Location [%s] is not capable of provide Values",
+                                             location),
+                                      NOT_VALUE_PROVIDER_ENABLED);
+  }
+
 
   private Object findComponent(Location location) throws ValueResolvingException {
     return componentLocator.find(location)

@@ -7,11 +7,14 @@
 package org.mule.test.values.extension;
 
 import org.mule.runtime.extension.api.annotation.param.Connection;
+import org.mule.runtime.extension.api.annotation.param.Content;
 import org.mule.runtime.extension.api.annotation.param.Optional;
 import org.mule.runtime.extension.api.annotation.param.ParameterGroup;
+import org.mule.runtime.extension.api.annotation.values.OfFieldValues;
 import org.mule.runtime.extension.api.annotation.values.OfValues;
 import org.mule.test.values.extension.resolver.MultiLevelValueProvider;
 import org.mule.test.values.extension.resolver.SimpleValueProvider;
+import org.mule.test.values.extension.resolver.TrueFalseValueProvider;
 import org.mule.test.values.extension.resolver.WithComplexActingParameter;
 import org.mule.test.values.extension.resolver.WithConnectionValueProvider;
 import org.mule.test.values.extension.resolver.WithConfigValueProvider;
@@ -24,6 +27,7 @@ import org.mule.test.values.extension.resolver.WithRequiredParameterValueProvide
 import org.mule.test.values.extension.resolver.WithRequiredParametersValueProvider;
 import org.mule.test.values.extension.resolver.WithMuleContextValueProvider;
 
+import java.io.InputStream;
 import java.util.List;
 
 public class ValuesOperations {
@@ -100,4 +104,10 @@ public class ValuesOperations {
 
   public void withVPOptionalParameterWithDefaultValue(@OfValues(WithOptionalParametersWithDefaultValueProvider.class) String providedParameters,
                                                       @Optional(defaultValue = "OPERATION_DEFAULT_VALUE") String optionalValue) {}
+
+  public void withFieldValues(@Content @OfFieldValues(fieldPaths = "simple.path",
+      value = SimpleValueProvider.class) @OfFieldValues(fieldPaths = "another.simple.path",
+          value = TrueFalseValueProvider.class) InputStream body) {}
+
+
 }

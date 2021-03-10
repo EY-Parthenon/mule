@@ -25,6 +25,7 @@ import org.mule.runtime.core.api.MuleContext;
 import org.mule.runtime.extension.api.values.ValueBuilder;
 import org.mule.runtime.extension.api.values.ValueProvider;
 import org.mule.runtime.extension.api.values.ValueResolvingException;
+import org.mule.runtime.module.extension.internal.loader.java.property.FieldsValueProviderFactoryModelProperty;
 import org.mule.runtime.module.extension.internal.loader.java.property.ValueProviderFactoryModelProperty;
 import org.mule.runtime.module.extension.internal.runtime.resolver.ParameterValueResolver;
 import org.mule.runtime.module.extension.internal.util.ReflectionCache;
@@ -76,6 +77,14 @@ public final class ValueProviderMediator<T extends ParameterizedModel & Enrichab
   }
 
   /**
+   * ADD JDOC
+   */
+  public Set<Value> getValues(String parameterName, String fieldPath, ParameterValueResolver parameterValueResolver)
+      throws ValueResolvingException {
+    return getValues(parameterName, parameterValueResolver, fieldPath, nullSupplier, nullSupplier);
+  }
+
+  /**
    * Given the name of a parameter or parameter group, and if the parameter supports it, this will try to resolve the {@link Value
    * values} for the parameter.
    *
@@ -93,6 +102,15 @@ public final class ValueProviderMediator<T extends ParameterizedModel & Enrichab
                               Supplier<Object> connectionSupplier, Supplier<Object> configurationSupplier)
       throws ValueResolvingException {
     return getValues(parameterName, parameterValueResolver, connectionSupplier, configurationSupplier, null);
+  }
+
+  /**
+   * ADD JDOC
+   */
+  public Set<Value> getValues(String parameterName, ParameterValueResolver parameterValueResolver, String fieldPath,
+                              Supplier<Object> connectionSupplier, Supplier<Object> configurationSupplier)
+      throws ValueResolvingException {
+    return getValues(parameterName, parameterValueResolver, fieldPath, connectionSupplier, configurationSupplier, null);
   }
 
   /**
@@ -114,6 +132,16 @@ public final class ValueProviderMediator<T extends ParameterizedModel & Enrichab
                               Supplier<Object> connectionSupplier, Supplier<Object> configurationSupplier,
                               ConnectionProvider connectionProvider)
       throws ValueResolvingException {
+    return getValues(parameterName, parameterValueResolver, null, connectionSupplier, configurationSupplier, connectionProvider);
+  }
+
+  /**
+   * ADD JDOC
+   */
+  public Set<Value> getValues(String parameterName, ParameterValueResolver parameterValueResolver, String fieldPath,
+                              Supplier<Object> connectionSupplier, Supplier<Object> configurationSupplier,
+                              ConnectionProvider connectionProvider)
+      throws ValueResolvingException {
     List<ParameterModel> parameters = getParameters(parameterName);
 
     if (parameters.isEmpty()) {
@@ -124,16 +152,26 @@ public final class ValueProviderMediator<T extends ParameterizedModel & Enrichab
 
     ParameterModel parameterModel = parameters.get(0);
 
-    ValueProviderFactoryModelProperty factoryModelProperty =
-        parameterModel.getModelProperty(ValueProviderFactoryModelProperty.class)
-            .orElseThrow(() -> new ValueResolvingException(format("The parameter with name '%s' is not an Values Provider",
-                                                                  parameterName),
-                                                           INVALID_VALUE_RESOLVER_NAME));
+    ValueProviderFactoryModelProperty factoryModelProperty;
+    if (fieldPath != null) {
+      factoryModelProperty =
+          parameterModel.getModelProperty(FieldsValueProviderFactoryModelProperty.class)
+              .map(fieldsValueProvider -> fieldsValueProvider.getFieldsValueProviderFactories().get(fieldPath))
+              .orElseThrow(() -> new ValueResolvingException(format("The parameter with name '%s' is not an Values Provider",
+                                                                    parameterName),
+                                                             INVALID_VALUE_RESOLVER_NAME));
+    } else {
+      factoryModelProperty =
+          parameterModel.getModelProperty(ValueProviderFactoryModelProperty.class)
+              .orElseThrow(() -> new ValueResolvingException(format("The parameter with name '%s' is not an Values Provider",
+                                                                    parameterName),
+                                                             INVALID_VALUE_RESOLVER_NAME));
+    }
 
     try {
       return withRefreshToken(connectionProvider,
                               () -> resolveValues(parameters, factoryModelProperty, parameterValueResolver,
-                                                  connectionSupplier, configurationSupplier));
+                                                  connectionSupplier, configurationSupplier, parameterName));
     } catch (ValueResolvingException e) {
       throw e;
     } catch (Exception e) {
@@ -145,7 +183,7 @@ public final class ValueProviderMediator<T extends ParameterizedModel & Enrichab
 
   private Set<Value> resolveValues(List<ParameterModel> parameters, ValueProviderFactoryModelProperty factoryModelProperty,
                                    ParameterValueResolver parameterValueResolver, Supplier<Object> connectionSupplier,
-                                   Supplier<Object> configurationSupplier)
+                                   Supplier<Object> configurationSupplier, String providerName)
       throws ValueResolvingException {
 
     ValueProvider valueProvider =
@@ -157,7 +195,7 @@ public final class ValueProviderMediator<T extends ParameterizedModel & Enrichab
     Set<Value> valueSet = valueProvider.resolve();
 
     return valueSet.stream()
-        .map(option -> cloneAndEnrichValue(option, parameters))
+        .map(option -> cloneAndEnrichValue(option, parameters, valueProvider.getId()))
         .map(ValueBuilder::build)
         .collect(toCollection(LinkedHashSet::new));
   }
@@ -172,8 +210,15 @@ public final class ValueProviderMediator<T extends ParameterizedModel & Enrichab
   private List<ParameterModel> getParameters(String valueName) {
     return containerModel.getAllParameterModels()
         .stream()
-        .filter(parameterModel -> parameterModel.getValueProviderModel()
-            .map(provider -> provider.getProviderName().equals(valueName))
+        .filter(parameterModel -> parameterModel.getValueProviderModels()
+            .map(either -> {
+              if (either.isLeft()) {
+                return either.getLeft().getProviderName().equals(valueName);
+              } else {
+                return either.getRight().stream()
+                    .anyMatch(fieldValueProviderModel -> fieldValueProviderModel.getProviderName().equals(valueName));
+              }
+            })
             .orElse(false))
         .collect(toList());
   }

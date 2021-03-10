@@ -25,11 +25,14 @@ import org.mule.runtime.api.meta.model.declaration.fluent.ParameterGroupDeclarat
 import org.mule.runtime.api.meta.model.declaration.fluent.ParameterizedDeclaration;
 import org.mule.runtime.api.meta.model.declaration.fluent.SourceDeclaration;
 import org.mule.runtime.api.meta.model.parameter.ActingParameterModel;
+import org.mule.runtime.api.meta.model.parameter.FieldValueProviderModel;
 import org.mule.runtime.api.meta.model.parameter.ValueProviderModel;
 import org.mule.runtime.api.util.Reference;
 import org.mule.runtime.extension.api.annotation.param.Config;
 import org.mule.runtime.extension.api.annotation.param.Connection;
 import org.mule.runtime.extension.api.annotation.param.Parameter;
+import org.mule.runtime.extension.api.annotation.values.OfFieldValues;
+import org.mule.runtime.extension.api.annotation.values.OfFieldsValues;
 import org.mule.runtime.extension.api.annotation.values.OfValues;
 import org.mule.runtime.extension.api.annotation.values.ValuePart;
 import org.mule.runtime.extension.api.declaration.fluent.util.IdempotentDeclarationWalker;
@@ -40,6 +43,7 @@ import org.mule.runtime.extension.api.model.parameter.ImmutableActingParameterMo
 import org.mule.runtime.extension.api.values.ValueProvider;
 import org.mule.runtime.module.extension.api.loader.java.type.ExtensionParameter;
 import org.mule.runtime.module.extension.api.loader.java.type.FieldElement;
+import org.mule.runtime.module.extension.internal.loader.java.property.FieldsValueProviderFactoryModelProperty;
 import org.mule.runtime.module.extension.internal.loader.java.property.ImplementingTypeModelProperty;
 import org.mule.runtime.module.extension.internal.loader.java.property.ParameterGroupModelProperty;
 import org.mule.runtime.module.extension.internal.loader.java.property.ValueProviderFactoryModelProperty;
@@ -50,6 +54,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Field;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -111,6 +116,7 @@ public class ValueProvidersParameterDeclarationEnricher extends AbstractAnnotate
     Map<ParameterGroupDeclaration, OfValues> dynamicGroupOptions =
         introspectParameterGroups(containerDeclaration.getParameterGroups());
     Map<ParameterDeclaration, OfValues> dynamicOptions = introspectParameters(allParameters);
+    Map<ParameterDeclaration, OfFieldsValues> dynamicFieldOptions = introspectParameterFields(allParameters);
 
     dynamicOptions.forEach((paramDeclaration, resolverClass) -> enrichParameter(resolverClass,
                                                                                 paramDeclaration,
@@ -119,11 +125,58 @@ public class ValueProvidersParameterDeclarationEnricher extends AbstractAnnotate
                                                                                 parameterNames, paramDeclaration.getName(),
                                                                                 allParameters));
 
+    dynamicFieldOptions.forEach((paramDeclaration, ofFieldsValues) -> enrichParameterFields(ofFieldsValues,
+                                                                                            paramDeclaration,
+                                                                                            parameterNames,
+                                                                                            paramDeclaration.getName(),
+                                                                                            allParameters));
+
     dynamicGroupOptions
         .forEach((paramGroupDeclaration, resolverClass) -> getParts(paramGroupDeclaration)
             .forEach((paramDeclaration, order) -> enrichParameter(resolverClass, paramDeclaration,
                                                                   paramDeclaration::setValueProviderModel, order, parameterNames,
                                                                   paramGroupDeclaration.getName(), allParameters)));
+  }
+
+  private void enrichParameterFields(OfFieldsValues ofFieldsValues, ParameterDeclaration paramDeclaration,
+                                     Map<String, String> parameterNames, String name, List<ParameterDeclaration> allParameters) {
+
+    OfFieldValues[] ofFieldValuesArray = ofFieldsValues.value();
+    List<FieldValueProviderModel> fieldValueProviderModels = new LinkedList<>();
+    Map<String, ValueProviderFactoryModelProperty> valueProviderFactoryModelProperties = new HashMap<>();
+    for (OfFieldValues ofFieldValues : ofFieldValuesArray) {
+
+      ValueProviderFactoryModelPropertyBuilder propertyBuilder =
+          ValueProviderFactoryModelProperty.builder(ofFieldValues.value());
+      ParameterizableTypeWrapper resolverClassWrapper =
+          new ParameterizableTypeWrapper(ofFieldValues.value(), new DefaultExtensionsTypeLoaderFactory().createTypeLoader());
+      List<ExtensionParameter> resolverParameters = resolverClassWrapper.getParametersAnnotatedWith(Parameter.class);
+      // ADD SDK-API Parameter
+      resolverParameters.forEach(param -> propertyBuilder
+          .withInjectableParameter(param.getName(), param.getType().asMetadataType(), param.isRequired()));
+
+      Reference<Boolean> requiresConfiguration = new Reference<>(false);
+      Reference<Boolean> requiresConnection = new Reference<>(false);
+
+      enrichWithConnection(propertyBuilder, resolverClassWrapper)
+          .ifPresent(field -> requiresConnection.set(true));
+      enrichWithConfiguration(propertyBuilder, resolverClassWrapper)
+          .ifPresent(field -> requiresConfiguration.set(true));
+
+      int partOrder = 1;
+      for (String fieldPath : ofFieldValues.fieldPaths()) {
+        ValueProviderFactoryModelProperty valueProviderFactoryModelProperty = propertyBuilder.build();
+        valueProviderFactoryModelProperties.put(fieldPath, valueProviderFactoryModelProperty);
+        fieldValueProviderModels
+            .add(new FieldValueProviderModel(getActingParametersModel(resolverParameters, parameterNames, allParameters),
+                                             requiresConfiguration.get(), requiresConnection.get(), ofFieldValues.open(),
+                                             partOrder,
+                                             name, getValueProviderId(ofFieldValues.value()), fieldPath));
+        partOrder++;
+      }
+      paramDeclaration.setFieldValueProviderModels(fieldValueProviderModels);
+      paramDeclaration.addModelProperty(new FieldsValueProviderFactoryModelProperty(valueProviderFactoryModelProperties));
+    }
   }
 
   /**
@@ -214,6 +267,17 @@ public class ValueProvidersParameterDeclarationEnricher extends AbstractAnnotate
     Map<ParameterDeclaration, OfValues> optionResolverEnabledParameters = new HashMap<>();
 
     parameters.forEach(param -> getAnnotation(param, OfValues.class)
+        .ifPresent(optionAnnotation -> optionResolverEnabledParameters.put(param, optionAnnotation)));
+
+    return optionResolverEnabledParameters;
+  }
+
+
+  private Map<ParameterDeclaration, OfFieldsValues> introspectParameterFields(List<ParameterDeclaration> parameters) {
+
+    Map<ParameterDeclaration, OfFieldsValues> optionResolverEnabledParameters = new HashMap<>();
+
+    parameters.forEach(param -> getAnnotation(param, OfFieldsValues.class)
         .ifPresent(optionAnnotation -> optionResolverEnabledParameters.put(param, optionAnnotation)));
 
     return optionResolverEnabledParameters;

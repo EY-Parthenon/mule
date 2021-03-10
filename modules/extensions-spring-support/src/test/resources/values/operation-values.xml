@@ -90,4 +90,7 @@
     <flow name="withErrorValueProvider">
         <values:with-error-value-provider errorCode="CUSTOM_ERROR"/>
     </flow>
+    <flow name="testPoc">
+        <values:with-field-values/>
+    </flow>
 </mule>

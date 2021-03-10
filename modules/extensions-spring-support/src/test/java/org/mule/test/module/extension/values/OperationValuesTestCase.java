@@ -144,4 +144,19 @@ public class OperationValuesTestCase extends AbstractValuesTestCase {
     assertThat(resolvingFailure.getFailureCode(), is("CUSTOM_ERROR"));
     assertThat(resolvingFailure.getMessage(), is(ERROR_MESSAGE));
   }
+
+  @Test
+  public void testPoc() throws Exception {
+    ValueResult result = getValueResult("testPoc", "body", "simple.path");
+    assertThat(result.getValues(), hasSize(3));
+    assertThat(result.getValues(), hasValues("channel1", "channel2", "channel3"));
+  }
+
+  @Test
+  public void anotherTestPoc() throws Exception {
+    ValueResult result = getValueResult("testPoc", "body", "another.simple.path");
+    assertThat(result.getValues(), hasSize(1));
+    assertThat(result.getValues(), hasValues("FALSE"));
+  }
+
 }
