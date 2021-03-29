@@ -137,7 +137,7 @@ public final class PolicyParametrization {
     return notificationListeners;
   }
 
-  //TODO before sending this as a PR, please retire from coding and do smth else.
+  // TODO before sending this as a PR, please retire from coding and do smth else.
   public void updateOrder(int order) {
     this.order = order;
   }

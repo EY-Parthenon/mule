@@ -45,6 +45,6 @@ public interface ApplicationPolicyInstance extends Initialisable, Disposable {
    */
   Optional<Policy> getOperationPolicy();
 
-  //TODO breaks every good design practice known to civilization.
+  // TODO breaks every good design practice known to civilization.
   void updateOrder(int order);
 }

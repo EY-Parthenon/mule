@@ -43,7 +43,8 @@ public class MuleApplicationPolicyProvider implements ApplicationPolicyProvider,
   private final PolicyTemplateFactory policyTemplateFactory;
   private final PolicyInstanceProviderFactory policyInstanceProviderFactory;
   private final List<RegisteredPolicyTemplate> registeredPolicyTemplates = new LinkedList<>();
-  private List<RegisteredPolicyInstanceProvider> registeredPolicyInstanceProviders = new LinkedList<>(); //TODO this has stopped being final., WAT
+  private List<RegisteredPolicyInstanceProvider> registeredPolicyInstanceProviders = new LinkedList<>(); // TODO this has stopped
+                                                                                                         // being final., WAT
   private PolicyAwareAttributes sourcePolicyAwareAttributes = noAttributes();
   private Application application;
 
@@ -126,12 +127,12 @@ public class MuleApplicationPolicyProvider implements ApplicationPolicyProvider,
         .findFirst()
         .ifPresent(ip -> ip.applicationPolicyInstance.updateOrder(parametrization.getOrder()));
 
-    registeredPolicyInstanceProviders.sort(null); //todo from L118 to here it's only to fix the ordering stuff.
+    registeredPolicyInstanceProviders.sort(null); // todo from L118 to here it's only to fix the ordering stuff.
 
-    //    todo this should be a precondition check.
-    //    if (registeredPolicyInstanceProviders.stream().anyMatch(isPolicy(parametrization))) {
-    //      throw new IllegalArgumentException(createPolicyAlreadyRegisteredError(parametrization.getId()));
-    //    }
+    // todo this should be a precondition check.
+    // if (registeredPolicyInstanceProviders.stream().anyMatch(isPolicy(parametrization))) {
+    // throw new IllegalArgumentException(createPolicyAlreadyRegisteredError(parametrization.getId()));
+    // }
 
     Optional<RegisteredPolicyTemplate> registeredPolicyTemplate = xxxNoSeQueHacexxx(policyTemplateDescriptor);
 
@@ -152,7 +153,7 @@ public class MuleApplicationPolicyProvider implements ApplicationPolicyProvider,
 
       policiesChangedCallback.run();
 
-      outdatedPolicy.getApplicationPolicyInstance().dispose(); //todo dispose outside the chain. perhaps async?
+      outdatedPolicy.getApplicationPolicyInstance().dispose(); // todo dispose outside the chain. perhaps async?
 
     } catch (InitialisationException e) {
       throw new RuntimeException("idk, smth failed", e);
@@ -240,7 +241,7 @@ public class MuleApplicationPolicyProvider implements ApplicationPolicyProvider,
         .reduce(noAttributes(), PolicyAwareAttributes::merge);
   }
 
-  @Override //TODO shouldn't this have a RW lock with the other editing this list?
+  @Override // TODO shouldn't this have a RW lock with the other editing this list?
   public List<Policy> findSourceParameterizedPolicies(PolicyPointcutParameters policyPointcutParameters) {
     List<Policy> policies = new ArrayList<>();
 
