@@ -205,4 +205,9 @@ public class DefaultApplicationPolicyInstance implements ApplicationPolicyInstan
     parametrization.updateOrder(order);
   }
 
+  @Override
+  public PolicyParametrization getParametrization() {
+    return parametrization;
+  }
+
 }

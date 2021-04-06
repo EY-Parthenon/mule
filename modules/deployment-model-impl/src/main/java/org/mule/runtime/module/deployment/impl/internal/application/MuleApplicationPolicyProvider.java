@@ -122,12 +122,17 @@ public class MuleApplicationPolicyProvider implements ApplicationPolicyProvider,
   @Override
   public void updatePolicy(PolicyTemplateDescriptor policyTemplateDescriptor, PolicyParametrization parametrization)
       throws PolicyRegistrationException {
-    registeredPolicyInstanceProviders.stream()
-        .filter(ip -> ip.policyId.equalsIgnoreCase(parametrization.getId()))
-        .findFirst()
-        .ifPresent(ip -> ip.applicationPolicyInstance.updateOrder(parametrization.getOrder()));
 
-    registeredPolicyInstanceProviders.sort(null); // todo from L118 to here it's only to fix the ordering stuff.
+    Optional<RegisteredPolicyInstanceProvider> instanceProvider = registeredPolicyInstanceProviders.stream()
+        .filter(ip -> compareParametrizations(ip.getApplicationPolicyInstance().getParametrization(), parametrization))
+        .findFirst();
+
+    if (instanceProvider.isPresent()) {
+      instanceProvider.get().applicationPolicyInstance.updateOrder(parametrization.getOrder());
+      registeredPolicyInstanceProviders.sort(null); // todo from L118 to here it's only to fix the ordering stuff.
+      policiesChangedCallback.run();
+      return;
+    }
 
     // todo this should be a precondition check.
     // if (registeredPolicyInstanceProviders.stream().anyMatch(isPolicy(parametrization))) {
@@ -159,6 +164,13 @@ public class MuleApplicationPolicyProvider implements ApplicationPolicyProvider,
       throw new RuntimeException("idk, smth failed", e);
     }
 
+  }
+
+  // TODO check template version / pointcuts / etc
+  private boolean compareParametrizations(PolicyParametrization parametrization, PolicyParametrization newParametrization) {
+    return parametrization.getId().equals(newParametrization.getId()) &&
+        parametrization.getParameters().equals(newParametrization.getParameters()) &&
+        parametrization.getOrder() != newParametrization.getOrder();
   }
 
   private Optional<RegisteredPolicyTemplate> findRegistered(PolicyTemplateDescriptor policyTemplateDescriptor) {

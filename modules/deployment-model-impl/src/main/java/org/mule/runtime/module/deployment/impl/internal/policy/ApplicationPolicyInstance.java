@@ -10,6 +10,7 @@ package org.mule.runtime.module.deployment.impl.internal.policy;
 import org.mule.runtime.api.lifecycle.Disposable;
 import org.mule.runtime.api.lifecycle.Initialisable;
 import org.mule.runtime.core.api.policy.Policy;
+import org.mule.runtime.core.api.policy.PolicyParametrization;
 import org.mule.runtime.deployment.model.api.policy.PolicyTemplate;
 import org.mule.runtime.policy.api.PolicyPointcut;
 
@@ -47,4 +48,7 @@ public interface ApplicationPolicyInstance extends Initialisable, Disposable {
 
   // TODO breaks every good design practice known to civilization.
   void updateOrder(int order);
+
+  // TODO breaks every good design practice known to civilization.
+  PolicyParametrization getParametrization();
 }
