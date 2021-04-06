@@ -45,6 +45,7 @@ import org.mule.runtime.module.extension.internal.loader.java.property.Parameter
 import org.mule.runtime.module.extension.internal.loader.java.property.ValueProviderFactoryModelProperty;
 import org.mule.runtime.module.extension.internal.loader.java.property.ValueProviderFactoryModelProperty.ValueProviderFactoryModelPropertyBuilder;
 import org.mule.runtime.module.extension.internal.loader.java.type.runtime.ParameterizableTypeWrapper;
+import org.mule.sdk.api.annotation.binding.Binding;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedElement;
@@ -139,6 +140,10 @@ public class ValueProvidersParameterDeclarationEnricher extends AbstractAnnotate
                                Consumer<ValueProviderModel> valueProviderModelConsumer, Integer partOrder,
                                Map<String, String> containerParameterNames, String name,
                                List<ParameterDeclaration> allParameters) {
+    Map<String, String> bindingMap = new HashMap<>();
+    for (Binding binding : resolverClass.bindings()) {
+      bindingMap.put(binding.actingParameter(), binding.path());
+    }
 
     ValueProviderFactoryModelPropertyBuilder propertyBuilder =
         ValueProviderFactoryModelProperty.builder(resolverClass.value());
@@ -147,7 +152,8 @@ public class ValueProvidersParameterDeclarationEnricher extends AbstractAnnotate
     List<ExtensionParameter> resolverParameters = resolverClassWrapper.getParametersAnnotatedWith(Parameter.class);
 
     resolverParameters.forEach(param -> propertyBuilder
-        .withInjectableParameter(param.getName(), param.getType().asMetadataType(), param.isRequired()));
+        .withInjectableParameter(param.getName(), param.getType().asMetadataType(), param.isRequired(),
+                                 bindingMap.getOrDefault(param.getName(), param.getName())));
 
     Reference<Boolean> requiresConfiguration = new Reference<>(false);
     Reference<Boolean> requiresConnection = new Reference<>(false);
@@ -160,7 +166,8 @@ public class ValueProvidersParameterDeclarationEnricher extends AbstractAnnotate
     paramDeclaration.addModelProperty(propertyBuilder.build());
 
     valueProviderModelConsumer
-        .accept(new ValueProviderModel(getActingParametersModel(resolverParameters, containerParameterNames, allParameters),
+        .accept(new ValueProviderModel(getActingParametersModel(resolverParameters, containerParameterNames, allParameters,
+                                                                bindingMap),
                                        requiresConfiguration.get(), requiresConnection.get(), resolverClass.open(), partOrder,
                                        name, getValueProviderId(resolverClass.value())));
   }
@@ -254,12 +261,15 @@ public class ValueProvidersParameterDeclarationEnricher extends AbstractAnnotate
 
   private List<ActingParameterModel> getActingParametersModel(List<ExtensionParameter> parameterDeclarations,
                                                               Map<String, String> parameterNames,
-                                                              List<ParameterDeclaration> allParameters) {
+                                                              List<ParameterDeclaration> allParameters,
+                                                              Map<String, String> bindings) {
+
     Map<String, Boolean> paramsInfo = parameterDeclarations.stream()
         .collect(toMap(param -> parameterNames.getOrDefault(param.getName(), param.getName()), ExtensionParameter::isRequired));
     return allParameters.stream()
         .filter(param -> paramsInfo.containsKey(param.getName()))
-        .map(param -> new ImmutableActingParameterModel(param.getName(), paramsInfo.get(param.getName())))
+        .map(param -> new ImmutableActingParameterModel(param.getName(), paramsInfo.get(param.getName()),
+                                                        bindings.getOrDefault(param.getName(), param.getName())))
         .collect(toList());
   }
 
